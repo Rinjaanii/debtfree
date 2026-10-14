@@ -1,0 +1,21 @@
+{
+  "name": "debtfree",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "DebtFree — план погашения долгов: сервис в Telegram и браузере плюс автономный HTML-файл",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/server.js",
+    "build": "node tools/build.js",
+    "test": "node tests/run-all.js",
+    "test:calc": "node tests/calc.test.js",
+    "test:auth": "node tests/auth.test.js",
+    "test:session": "node tests/session.test.js",
+    "test:env": "node tests/env.test.js",
+    "tunnel": "node tools/tunnel.js",
+    "setup-bot": "node tools/setup-bot.js",
+    "test:standalone": "node tests/standalone.test.js",
+    "test:server": "node tests/server.test.js"
+  }
+}

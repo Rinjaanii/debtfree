@@ -1,0 +1,15 @@
+# Caddyfile — реверс-прокси для DebtFree.
+# Caddy сам получает и продлевает HTTPS-сертификат, поэтому это самый короткий путь.
+#
+# Замените debtfree.example.com на свой домен.
+# После правки: sudo systemctl reload caddy
+
+debtfree.example.com {
+    # Сервис слушает localhost:8080 (значение PORT из .env)
+    reverse_proxy 127.0.0.1:8080
+
+    # Логи (по желанию)
+    log {
+        output file /var/log/caddy/debtfree.log
+    }
+}

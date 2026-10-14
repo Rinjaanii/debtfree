@@ -1,0 +1,28 @@
+[Unit]
+Description=DebtFree — сервис плана погашения долгов
+After=network.target
+
+[Service]
+Type=simple
+# Пользователь, от которого запускается сервис. Замените на своего:
+#   sudo useradd --system --create-home debtfree
+#   и здесь оставьте debtfree, либо впишите существующего (ubuntu, deploy и т.п.)
+User=debtfree
+# Группа пользователя; обычно совпадает с именем
+Group=debtfree
+
+# Каталог, куда выложен проект. Поправьте под себя.
+WorkingDirectory=/opt/debtfree
+
+# Node вызываем по абсолютному пути. Узнать его: which node
+ExecStart=/usr/bin/node src/server.js
+
+# Если сервис упал — поднимаем заново
+Restart=always
+RestartSec=3
+
+# В .env лежит токен бота — сервер читает его сам, поэтому здесь токен не пишем
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

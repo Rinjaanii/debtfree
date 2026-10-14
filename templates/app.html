@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>DebtFree</title>
+<!--DF_STYLES-->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+<header class="top">
+  <div class="who">
+    <span class="dot" id="status-dot"></span>
+    <span id="who-text">Загрузка…</span>
+  </div>
+  <div class="top-note" id="mode-note"></div>
+</header>
+
+<main id="app" class="app">
+  <div class="loading" id="loading">Считаем ваш план…</div>
+
+  <!-- ПЛАН -->
+  <section class="panel" id="panel-plan" hidden>
+    <div id="verdict"></div>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <div class="card-h">Мои условия</div>
+      <div class="card-b">
+        <label class="fl" for="budget">Сколько я плачу по долгам в месяц, ₽</label>
+        <input id="budget" type="text" inputmode="decimal" autocomplete="off">
+        <div class="hint" id="budget-hint"></div>
+
+        <label class="fl" for="strategy">Стратегия</label>
+        <select id="strategy">
+          <option value="avalanche">Лавина — сначала дорогая ставка (выгоднее)</option>
+          <option value="snowball">Снежный ком — сначала маленький долг</option>
+        </select>
+
+        <div class="row2">
+          <div>
+            <label class="fl" for="extra">Разовая доплата, ₽</label>
+            <input id="extra" type="text" inputmode="decimal" autocomplete="off">
+          </div>
+          <div>
+            <label class="fl" for="extra-month">Через сколько месяцев</label>
+            <input id="extra-month" type="text" inputmode="numeric" autocomplete="off">
+          </div>
+        </div>
+        <div class="hint">Доплата — премия, продажа, подработка: укажите, когда её ждёте.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Динамика долга</div>
+      <div class="card-b chart-b">
+        <svg id="chart" viewBox="0 0 340 180" preserveAspectRatio="xMidYMid meet" role="img" aria-label="График снижения долга"></svg>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Очередь закрытия</div>
+      <div class="card-b" id="order"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Если платить больше</div>
+      <div class="card-b tight"><table id="whatif"><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ДОЛГИ -->
+  <section class="panel" id="panel-debts" hidden>
+    <div class="card">
+      <div class="card-h">
+        Мои долги
+        <button class="ghost" id="btn-add-debt">+ Добавить</button>
+      </div>
+      <div class="card-b tight" id="debts-list"></div>
+    </div>
+    <div id="debt-alerts"></div>
+  </section>
+
+  <!-- ЕЩЁ -->
+  <section class="panel" id="panel-settings" hidden>
+    <div class="card">
+      <div class="card-h">Аккаунт</div>
+      <div class="card-b" id="account-box"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Мои данные</div>
+      <div class="card-b">
+        <p class="hint">
+          Долги, бюджет и стратегия хранятся на сервере под вашим аккаунтом Telegram.
+          Открыть их можно и здесь, и в Telegram — это одни и те же данные.
+        </p>
+        <button id="btn-export">Скачать мои данные (JSON)</button>
+        <button class="ghost danger" id="btn-wipe">Удалить все мои данные</button>
+        <p class="hint" id="offline-note" hidden>
+          Сейчас страница работает без связи с сервером: данные хранятся только в этом браузере.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">О расчёте</div>
+      <div class="card-b">
+        <p class="hint">
+          Проценты начисляются как «остаток × ставка / 12». Все минимальные платежи уходят по графику,
+          свободные деньги — в один долг, первый в очереди; после закрытия его платёж переходит дальше.
+          Банки считают проценты по дням, поэтому это близкая оценка, а не копейка в копейку.
+        </p>
+        <p class="hint">DebtFree не даёт финансовых рекомендаций и не заменяет договор с банком.</p>
+        <p class="hint" id="about-version"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="plan" aria-selected="true">План</button>
+  <button data-tab="debts" aria-selected="false">Долги</button>
+  <button data-tab="settings" aria-selected="false">Ещё</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<!-- редактор долга -->
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-h">
+      <b id="sheet-title">Долг</b>
+      <button class="ghost icon" id="sheet-close">✕</button>
+    </div>
+    <div class="sheet-b">
+      <label class="fl" for="f-name">Название</label>
+      <input id="f-name" type="text" placeholder="Кредитная карта" autocomplete="off">
+
+      <label class="fl" for="f-amount">Остаток долга, ₽</label>
+      <input id="f-amount" type="text" inputmode="decimal" autocomplete="off">
+
+      <label class="fl" for="f-rate">Ставка, % годовых</label>
+      <input id="f-rate" type="text" inputmode="decimal" autocomplete="off">
+
+      <label class="fl" for="f-min">Минимальный платёж в месяц, ₽</label>
+      <input id="f-min" type="text" inputmode="decimal" autocomplete="off">
+
+      <div class="row2">
+        <div>
+          <label class="fl" for="f-term">Срок, мес.</label>
+          <input id="f-term" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+        <div>
+          <label class="fl" for="f-day">День платежа</label>
+          <input id="f-day" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+      </div>
+      <div class="hint" id="sheet-hint"></div>
+    </div>
+    <div class="sheet-f">
+      <button class="ghost danger" id="sheet-delete">Удалить</button>
+      <button class="primary" id="sheet-save">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!--DF_SCRIPT-->
+</body>
+</html>

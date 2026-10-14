@@ -1,0 +1,14 @@
+# данные пользователей — не в репозиторий
+data/
+*.log
+
+# настройки с токеном бота: у каждого свои
+.env
+.env.*
+!.env.example
+
+# служебное
+node_modules/
+.tgcloud/
+.DS_Store
+Thumbs.db

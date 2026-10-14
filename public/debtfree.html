@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>DebtFree — план погашения долгов</title>
+<meta name="description" content="DebtFree: план погашения долгов — очередь закрытия, экономия на процентах, календарь платежей. Работает без сервера.">
+<!-- Собрано из debtfree/ версии 0.3.0. Правьте исходники: node debtfree/tools/build.js -->
+<style>
+/* DebtFree — оформление мини-аппы.
+   Цвета берутся из темы Telegram, если аппа открыта внутри него; иначе — запасная
+   палитра, чтобы интерфейс нормально выглядел и в обычном браузере, и в файле. */
+
+/* DebtFree — оформление мини-аппы.
+   Цвета берутся из темы Telegram, если аппа открыта внутри него; иначе — запасная палитра,
+   чтобы интерфейс нормально выглядел и в обычном браузере. */
+
+:root {
+  --bg: var(--tg-theme-bg-color, #ffffff);
+  --bg2: var(--tg-theme-secondary-bg-color, #f4f6fb);
+  --ink: var(--tg-theme-text-color, #111a2e);
+  --muted: var(--tg-theme-hint-color, #7c879c);
+  --link: var(--tg-theme-link-color, #4f46e5);
+  --btn: var(--tg-theme-button-color, #4f46e5);
+  --btn-text: var(--tg-theme-button-text-color, #ffffff);
+  --danger: var(--tg-theme-destructive-text-color, #dc2626);
+  --line: rgba(17, 26, 46, .10);
+  --good: #0f9d6e;
+  --warn: #d97706;
+  --soft: rgba(79, 70, 229, .10);
+  --radius: 14px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  --safe-top: var(--tg-safe-area-inset-top, 0px);
+  --safe-bottom: var(--tg-safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg2);
+  color: var(--ink);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding-bottom: calc(64px + var(--safe-bottom));
+  -webkit-font-smoothing: antialiased;
+}
+
+.top {
+  position: sticky; top: 0; z-index: 20;
+  padding: calc(10px + var(--safe-top)) 14px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.who { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; min-width: 0; }
+.who span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.dot.live { background: var(--good); }
+.dot.dev { background: var(--warn); }
+.top-note { font-size: 11.5px; color: var(--muted); text-align: right; }
+
+.app { padding: 12px 12px 24px; display: grid; gap: 12px; max-width: 640px; margin: 0 auto; }
+.panel { display: grid; gap: 12px; }
+.panel[hidden] { display: none; }
+.loading { text-align: center; color: var(--muted); padding: 40px 0; }
+
+.card { background: var(--bg); border-radius: var(--radius); overflow: hidden; }
+.card-h {
+  padding: 12px 14px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.card-b { padding: 14px; }
+.card-b.tight { padding: 0; }
+.chart-b { padding: 10px 6px 4px; }
+
+/* поля */
+.fl { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 6px; }
+.fl:first-child { margin-top: 0; }
+input, select, button { font: inherit; }
+input, select {
+  width: 100%; padding: 11px 12px; border-radius: 11px; color: var(--ink);
+  background: var(--bg2); border: 1px solid transparent; font-family: var(--mono); font-size: 15px;
+}
+select { font-family: inherit; font-size: 14.5px; }
+input:focus, select:focus { outline: 2px solid var(--soft); border-color: var(--btn); }
+input[readonly] { color: var(--muted); letter-spacing: .08em; }
+.hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+button {
+  border: 0; border-radius: 11px; padding: 11px 14px; background: var(--bg2); color: var(--ink);
+  cursor: pointer; font-size: 14.5px; transition: opacity .15s;
+}
+button:active { opacity: .65; }
+button.primary { background: var(--btn); color: var(--btn-text); font-weight: 600; width: 100%; }
+button.ghost { background: transparent; color: var(--link); padding: 8px 10px; }
+button.danger { color: var(--danger); }
+button.icon { padding: 6px 10px; font-size: 16px; color: var(--muted); }
+button:disabled { opacity: .45; }
+
+/* KPI */
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kpi { background: var(--bg); border-radius: var(--radius); padding: 12px; }
+.kpi .t { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.kpi .v { font-family: var(--mono); font-size: 19px; font-weight: 600; margin-top: 5px; letter-spacing: -.02em; }
+.kpi .d { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.kpi.hero { grid-column: 1 / -1; background: linear-gradient(150deg, var(--btn), #6d5ef0); color: #fff; }
+.kpi.hero .t, .kpi.hero .d { color: rgba(255, 255, 255, .85); }
+.kpi.good .v { color: var(--good); }
+.kpi.warn .v { color: var(--warn); }
+.kpi.bad .v { color: var(--danger); }
+
+/* сообщения */
+.box { border-radius: var(--radius); padding: 12px 14px; font-size: 14px; margin-bottom: 12px; }
+.box.good { background: rgba(15, 157, 110, .12); color: #0b6b4c; }
+.box.warn { background: rgba(217, 119, 6, .14); color: #8a5a06; }
+.box.bad { background: rgba(220, 38, 38, .12); color: #9b1c1c; }
+.box.info { background: var(--soft); color: var(--link); }
+.box b { font-weight: 600; }
+
+/* список долгов */
+.debt-row {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line);
+  background: var(--bg); width: 100%; text-align: left; color: inherit; border-radius: 0;
+}
+.debt-row:last-child { border-bottom: 0; }
+.debt-row .mark { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.debt-row .main { flex: 1; min-width: 0; }
+.debt-row .nm { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.debt-row .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.debt-row .sum { font-family: var(--mono); font-size: 14px; text-align: right; }
+
+/* очередь */
+.step { display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.step:last-child { border-bottom: 0; }
+.step .num {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--soft); color: var(--link);
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex: 0 0 auto;
+}
+.step .body { flex: 1; min-width: 0; }
+.step .ttl { font-weight: 600; font-size: 14px; }
+.step .meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.step .why { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+.step .paid { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--link); }
+.step .paid.soon { color: var(--warn); }
+
+/* таблица */
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; font-family: var(--mono); }
+tr:last-child td { border-bottom: 0; }
+tr.me { background: var(--soft); }
+
+/* график */
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); padding: 4px 8px 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+/* табы */
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--bg); border-top: 1px solid var(--line);
+  padding-bottom: var(--safe-bottom);
+}
+.tabs button {
+  background: transparent; border-radius: 0; padding: 12px 4px; font-size: 11.5px; color: var(--muted);
+}
+.tabs button[aria-selected="true"] { color: var(--link); font-weight: 600; }
+
+/* bottom sheet */
+.sheet { position: fixed; inset: 0; z-index: 50; background: rgba(10, 15, 30, .45); display: flex; align-items: flex-end; }
+.sheet[hidden] { display: none; }
+.sheet-card { background: var(--bg); width: 100%; max-height: 92vh; overflow: auto; border-radius: 18px 18px 0 0; padding-bottom: var(--safe-bottom); }
+.sheet-h { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); }
+.sheet-b { padding: 4px 16px 16px; }
+.sheet-f { display: flex; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--bg); }
+.sheet-f .primary { flex: 1; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(78px + var(--safe-bottom)); transform: translateX(-50%) translateY(14px);
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 11px; font-size: 13.5px;
+  opacity: 0; transition: .2s; pointer-events: none; z-index: 60; max-width: 90vw; text-align: center;
+}
+.toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (min-width: 560px) {
+  .kpis { grid-template-columns: repeat(4, 1fr); }
+  .kpi.hero { grid-column: 1 / -1; }
+}
+
+/* �������� �������������� */
+
+</style>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+<header class="top">
+  <div class="who">
+    <span class="dot" id="status-dot"></span>
+    <span id="who-text">Загрузка…</span>
+  </div>
+  <div class="top-note" id="mode-note"></div>
+</header>
+
+<main id="app" class="app">
+  <div class="loading" id="loading">Считаем ваш план…</div>
+
+  <!-- ПЛАН -->
+  <section class="panel" id="panel-plan" hidden>
+    <div id="verdict"></div>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <div class="card-h">Мои условия</div>
+      <div class="card-b">
+        <label class="fl" for="budget">Сколько я плачу по долгам в месяц, ₽</label>
+        <input id="budget" type="text" inputmode="decimal" autocomplete="off">
+        <div class="hint" id="budget-hint"></div>
+
+        <label class="fl" for="strategy">Стратегия</label>
+        <select id="strategy">
+          <option value="avalanche">Лавина — сначала дорогая ставка (выгоднее)</option>
+          <option value="snowball">Снежный ком — сначала маленький долг</option>
+        </select>
+
+        <div class="row2">
+          <div>
+            <label class="fl" for="extra">Разовая доплата, ₽</label>
+            <input id="extra" type="text" inputmode="decimal" autocomplete="off">
+          </div>
+          <div>
+            <label class="fl" for="extra-month">Через сколько месяцев</label>
+            <input id="extra-month" type="text" inputmode="numeric" autocomplete="off">
+          </div>
+        </div>
+        <div class="hint">Доплата — премия, продажа, подработка: укажите, когда её ждёте.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Динамика долга</div>
+      <div class="card-b chart-b">
+        <svg id="chart" viewBox="0 0 340 180" preserveAspectRatio="xMidYMid meet" role="img" aria-label="График снижения долга"></svg>
+        <div class="legend" id="legend"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Очередь закрытия</div>
+      <div class="card-b" id="order"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Если платить больше</div>
+      <div class="card-b tight"><table id="whatif"><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <!-- ДОЛГИ -->
+  <section class="panel" id="panel-debts" hidden>
+    <div class="card">
+      <div class="card-h">
+        Мои долги
+        <button class="ghost" id="btn-add-debt">+ Добавить</button>
+      </div>
+      <div class="card-b tight" id="debts-list"></div>
+    </div>
+    <div id="debt-alerts"></div>
+  </section>
+
+  <!-- ЕЩЁ -->
+  <section class="panel" id="panel-settings" hidden>
+    <div class="card">
+      <div class="card-h">Аккаунт</div>
+      <div class="card-b" id="account-box"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Мои данные</div>
+      <div class="card-b">
+        <p class="hint">
+          Долги, бюджет и стратегия хранятся на сервере под вашим аккаунтом Telegram.
+          Открыть их можно и здесь, и в Telegram — это одни и те же данные.
+        </p>
+        <button id="btn-export">Скачать мои данные (JSON)</button>
+        <button class="ghost danger" id="btn-wipe">Удалить все мои данные</button>
+        <p class="hint" id="offline-note" hidden>
+          Сейчас страница работает без связи с сервером: данные хранятся только в этом браузере.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">О расчёте</div>
+      <div class="card-b">
+        <p class="hint">
+          Проценты начисляются как «остаток × ставка / 12». Все минимальные платежи уходят по графику,
+          свободные деньги — в один долг, первый в очереди; после закрытия его платёж переходит дальше.
+          Банки считают проценты по дням, поэтому это близкая оценка, а не копейка в копейку.
+        </p>
+        <p class="hint">DebtFree не даёт финансовых рекомендаций и не заменяет договор с банком.</p>
+        <p class="hint" id="about-version"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="plan" aria-selected="true">План</button>
+  <button data-tab="debts" aria-selected="false">Долги</button>
+  <button data-tab="settings" aria-selected="false">Ещё</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<!-- редактор долга -->
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-h">
+      <b id="sheet-title">Долг</b>
+      <button class="ghost icon" id="sheet-close">✕</button>
+    </div>
+    <div class="sheet-b">
+      <label class="fl" for="f-name">Название</label>
+      <input id="f-name" type="text" placeholder="Кредитная карта" autocomplete="off">
+
+      <label class="fl" for="f-amount">Остаток долга, ₽</label>
+      <input id="f-amount" type="text" inputmode="decimal" autocomplete="off">
+
+      <label class="fl" for="f-rate">Ставка, % годовых</label>
+      <input id="f-rate" type="text" inputmode="decimal" autocomplete="off">
+
+      <label class="fl" for="f-min">Минимальный платёж в месяц, ₽</label>
+      <input id="f-min" type="text" inputmode="decimal" autocomplete="off">
+
+      <div class="row2">
+        <div>
+          <label class="fl" for="f-term">Срок, мес.</label>
+          <input id="f-term" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+        <div>
+          <label class="fl" for="f-day">День платежа</label>
+          <input id="f-day" type="text" inputmode="numeric" autocomplete="off">
+        </div>
+      </div>
+      <div class="hint" id="sheet-hint"></div>
+    </div>
+    <div class="sheet-f">
+      <button class="ghost danger" id="sheet-delete">Удалить</button>
+      <button class="primary" id="sheet-save">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+"use strict";
+window.DF_STANDALONE = true;
+
+/*DF_CORE_START*/
+/* ---- расчётное ядро (то же, что и на сервере) ---- */
+(function () {
+"use strict";
+/**
+ * DebtFree — расчётное ядро.
+ *
+ * Чистый JavaScript: ни DOM, ни сети, ни Node-специфики.
+ * Один и тот же файл используется браузером (мини-аппа) и сервером (Node),
+ * поэтому цифры в интерфейсе и в ответах API не могут разойтись.
+ *
+ * Модель: ежемесячное начисление процентов по каждому долгу
+ * (остаток × ставка / 12), обязательные минимальные платежи по всем долгам,
+ * весь остаток бюджета — в один долг по очереди («лавина» или «снежный ком»),
+ * после закрытия его платёж переходит на следующий.
+ */
+
+const MAX_MONTHS = 600;
+
+const PALETTE = [
+  "#4f46e5", "#0ea5e9", "#0f9d6e", "#f59e0b", "#e11d48",
+  "#8b5cf6", "#14b8a6", "#f97316", "#84cc16", "#6366f1"
+];
+
+const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+const MONTHS_FULL = ["январь", "февраль", "март", "апрель", "май", "июнь",
+  "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+
+/* ------------------------------------------------------------------ утилиты */
+
+function r2(x) { return Math.round((Number(x) || 0) * 100) / 100; }
+function clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+function num(x, dflt) { const n = parseFloat(x); return isFinite(n) ? n : dflt; }
+
+function plural(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+}
+
+function fmtMoney(x) {
+  if (!isFinite(x)) return "—";
+  const neg = x < 0;
+  let s = String(Math.round(Math.abs(x))), out = "";
+  while (s.length > 3) { out = " " + s.slice(-3) + out; s = s.slice(0, -3); }
+  return (neg ? "−" : "") + s + out + " \u20BD";
+}
+
+function fmtPct(x, d) {
+  const p = Math.pow(10, d == null ? 1 : d);
+  return (Math.round((Number(x) || 0) * p) / p).toFixed(d == null ? 1 : d).replace(".", ",") + "%";
+}
+
+function durationText(m) {
+  if (!isFinite(m) || m <= 0) return "—";
+  const y = Math.floor(m / 12), mo = m % 12;
+  if (y === 0) return m + " " + plural(m, "месяц", "месяца", "месяцев");
+  if (mo === 0) return y + " " + plural(y, "год", "года", "лет");
+  return y + " " + plural(y, "год", "года", "лет") + " " + mo + " мес.";
+}
+
+/** Подпись месяца относительно сегодняшнего. now — для тестов. */
+function monthLabel(offset, withYear, now) {
+  const base = now ? new Date(now) : new Date();
+  const d = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+  return MONTHS_SHORT[d.getMonth()] + (withYear ? (" " + d.getFullYear()) : "");
+}
+function monthLabelFull(offset, now) {
+  const base = now ? new Date(now) : new Date();
+  const d = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+  return MONTHS_FULL[d.getMonth()] + " " + d.getFullYear();
+}
+function yearOf(offset, now) {
+  const base = now ? new Date(now) : new Date();
+  const d = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+  return d.getFullYear();
+}
+
+/* ---------------------------------------------------------------- валидация */
+
+function validateDebts(debts, budget) {
+  const problems = [];
+  let sumDebt = 0, sumMin = 0, wsum = 0, rateBase = 0;
+  (debts || []).forEach(function (d) {
+    if (d.amount > 0) {
+      sumDebt += d.amount;
+      wsum += d.amount * clamp(d.rate, 0, 300);
+      rateBase += d.amount;
+    }
+    if (d.amount > 0 && d.minPay > 0) sumMin += d.minPay;
+
+    if (d.amount > 0 && d.minPay <= 0) {
+      problems.push({ level: "error", text: "«" + d.name + "»: не указан минимальный платёж — долг не будет обслуживаться." });
+    }
+    const mrate = clamp(d.rate, 0, 300) / 100 / 12;
+    if (d.amount > 0 && d.minPay > 0 && mrate > 0 && d.minPay < d.amount * mrate + d.amount * 0.005) {
+      problems.push({
+        level: "warn",
+        text: "«" + d.name + "»: платёж " + fmtMoney(d.minPay) + " почти не уменьшает долг (проценты ≈ " +
+              fmtMoney(d.amount * mrate) + "/мес)."
+      });
+    }
+  });
+  if (sumMin > budget + 0.5) {
+    problems.push({
+      level: "error",
+      text: "Минимальные платежи (" + fmtMoney(sumMin) + ") больше бюджета (" + fmtMoney(budget) + ")."
+    });
+  }
+  return { problems, sumDebt, sumMin, avgRate: rateBase > 0 ? wsum / rateBase : 0 };
+}
+
+/* ---------------------------------------------------------------- симуляция */
+
+/**
+ * @param {Array} debts   [{ id, name, amount, rate, minPay, term, dueDay, ownerId, ownerName }]
+ * @param {number} budget общий платёж в месяц
+ * @param {"avalanche"|"snowball"|"minimum"} ordering
+ * @param {{extras?:Array, growth?:number, now?:Date|string}} opts
+ */
+function simulate(debts, budget, ordering, opts) {
+  opts = opts || {};
+  const extras = opts.extras || [];
+  const growth = opts.growth || 0;
+  const now = opts.now;
+
+  const items = (debts || []).filter(function (d) { return num(d.amount, 0) > 0.005; }).map(function (d, i) {
+    const rate = clamp(num(d.rate, 0), 0, 300);
+    return {
+      key: d.id || ("k" + i),
+      name: String(d.name || ("Долг " + (i + 1))),
+      ownerId: d.ownerId || null,
+      ownerName: d.ownerName || null,
+      color: d.color || PALETTE[i % PALETTE.length],
+      rate: rate,
+      mrate: rate / 100 / 12,
+      amount: r2(d.amount),
+      minPay: Math.max(0, num(d.minPay, 0)),
+      dueDay: clamp(Math.round(num(d.dueDay, 1)), 1, 31),
+      start: r2(d.amount),
+      /** Исходный размер долга: по нему «снежный ком» выбирает цель и он не меняется
+       *  в ходе расчёта (в отличие от amount, который уменьшается с платежами). */
+      startAmount: r2(d.amount),
+      totalInterest: 0,
+      totalPaid: 0,
+      principalPaid: 0,
+      paidMonth: null,
+      idx: i
+    };
+  });
+
+  const startTotal = r2(items.reduce(function (s, d) { return s + d.start; }, 0));
+  const minSum = r2(items.reduce(function (s, d) { return s + d.minPay; }, 0));
+
+  let queue = items.slice();
+  function reorder() {
+    // Внимание: сортируем по ИСХОДНОМУ размеру долга (startAmount), а не по текущему
+    // остатку — иначе «снежный ком» менял бы цель по мере погашения.
+    if (ordering === "avalanche") queue.sort(function (a, b) { return (b.mrate - a.mrate) || (b.startAmount - a.startAmount); });
+    else if (ordering === "snowball") queue.sort(function (a, b) { return (a.startAmount - b.startAmount) || (b.mrate - a.mrate); });
+    else queue.sort(function (a, b) { return a.idx - b.idx; });
+    queue = queue.filter(function (d) { return d.amount > 0.005; });
+  }
+  reorder();
+
+  const months = [];
+  let t = 0, everGrew = false;
+
+  for (t = 0; t < MAX_MONTHS && queue.length > 0; t++) {
+    const interestByKey = {};
+    let interestTotal = 0;
+    queue.forEach(function (d) {
+      const before = d.amount;
+      const intr = d.amount * d.mrate;
+      d.totalInterest += intr;
+      interestTotal += intr;
+      d.amount += intr;
+      interestByKey[d.key] = intr;
+      if (d.amount > before && d.minPay <= intr + 0.01) everGrew = true;
+    });
+
+    const factor = growth > 0 ? Math.pow(1 + growth / 100, Math.floor(t / 12)) : 1;
+    let pool = (ordering === "minimum") ? minSum : Math.max(budget * factor, minSum);
+    for (let ei = 0; ei < extras.length; ei++) {
+      if (Math.round(num(extras[ei].month, -1)) === t) pool += num(extras[ei].amount, 0);
+    }
+    if (!(pool > 0)) pool = minSum;
+
+    let need = 0;
+    queue.forEach(function (d) { need += Math.min(d.minPay, d.amount); });
+    let extraPool = Math.max(0, Math.max(pool, need) - need);
+
+    const payByKey = {};
+    const closedItems = [];
+    let paidTotal = 0;
+
+    queue.forEach(function (d) {
+      const p = Math.min(d.minPay, d.amount);
+      d.amount = r2(d.amount - p);
+      d.totalPaid += p;
+      d.principalPaid += Math.max(0, p - Math.min(interestByKey[d.key] || 0, p));
+      paidTotal += p;
+      payByKey[d.key] = r2((payByKey[d.key] || 0) + p);
+      // минимальный платёж тоже может закрыть долг — отмечаем сразу,
+      // иначе следующая пересортировка уберёт его из очереди без даты закрытия
+      if (d.amount <= 0.005 && d.paidMonth === null) {
+        d.amount = 0;
+        d.paidMonth = t + 1;
+        closedItems.push({ key: d.key, name: d.name, ownerId: d.ownerId, ownerName: d.ownerName });
+      }
+    });
+
+    let guard = 0;
+    while (extraPool > 0.005 && guard++ < 500) {
+      reorder();
+      if (!queue.length) break;
+      const target = queue[0];
+      const pay = Math.min(extraPool, target.amount);
+      if (pay <= 0.005) break;
+      target.amount = r2(target.amount - pay);
+      target.totalPaid += pay;
+      target.principalPaid += pay;
+      paidTotal += pay;
+      extraPool -= pay;
+      payByKey[target.key] = r2((payByKey[target.key] || 0) + pay);
+
+      // Долг может закрыться прямо здесь, досрочным платежом. Если это не отметить
+      // сразу, он останется без даты закрытия: следующий виток цикла его уже
+      // отфильтрует, и до проверки ниже он не дойдёт.
+      if (target.amount <= 0.005 && target.paidMonth === null) {
+        target.amount = 0;
+        target.paidMonth = t + 1;
+        closedItems.push({ key: target.key, name: target.name, ownerId: target.ownerId, ownerName: target.ownerName });
+        queue = queue.filter(function (d) { return d !== target; });
+      }
+    }
+
+    queue.forEach(function (d) {
+      if (d.amount <= 0.005 && d.paidMonth === null) {
+        d.amount = 0;
+        d.paidMonth = t + 1;
+        closedItems.push({ key: d.key, name: d.name, ownerId: d.ownerId, ownerName: d.ownerName });
+      }
+    });
+    queue = queue.filter(function (d) { return d.amount > 0.005; });
+
+    const rec = {
+      monthIdx: t,
+      label: monthLabel(t, true, now),
+      labelShort: monthLabel(t, false, now),
+      labelFull: monthLabelFull(t, now),
+      year: yearOf(t, now),
+      payment: r2(paidTotal),
+      interest: r2(interestTotal),
+      principal: r2(Math.max(0, paidTotal - interestTotal)),
+      totalBalance: r2(queue.reduce(function (s, d) { return s + d.amount; }, 0)),
+      bal: {},
+      pay: {},
+      closed: closedItems.map(function (d) { return d.name; }),
+      closedItems: closedItems,
+      closedCount: items.filter(function (d) { return d.paidMonth !== null && d.paidMonth <= t + 1; }).length,
+      activeCount: queue.length,
+      byOwner: {}
+    };
+
+    items.forEach(function (d) {
+      const ownerKey = d.ownerId || "__none__";
+      const bal = (d.paidMonth !== null && d.paidMonth <= t + 1) ? 0 : r2(d.amount);
+      rec.bal[d.key] = bal;
+      rec.pay[d.key] = payByKey[d.key] || 0;
+      if (!rec.byOwner[ownerKey]) rec.byOwner[ownerKey] = { bal: 0, pay: 0, interest: 0 };
+      rec.byOwner[ownerKey].bal = r2(rec.byOwner[ownerKey].bal + bal);
+      rec.byOwner[ownerKey].pay = r2(rec.byOwner[ownerKey].pay + (rec.pay[d.key] || 0));
+    });
+    queue.forEach(function (d) {
+      const ownerKey = d.ownerId || "__none__";
+      if (!rec.byOwner[ownerKey]) rec.byOwner[ownerKey] = { bal: 0, pay: 0, interest: 0 };
+    });
+    items.forEach(function (d) {
+      const ownerKey = d.ownerId || "__none__";
+      if (d.paidMonth === t + 1) rec.byOwner[ownerKey].interest = r2(rec.byOwner[ownerKey].interest + d.totalInterest);
+    });
+    months.push(rec);
+  }
+
+  const totalInterest = r2(items.reduce(function (s, d) { return s + d.totalInterest; }, 0));
+  const totalPaid = r2(items.reduce(function (s, d) { return s + d.totalPaid; }, 0));
+  const unreachable = queue.length > 0;
+
+  // агрегаты по владельцам
+  const perOwner = {};
+  function bucket(id, name, color) {
+    if (!perOwner[id]) perOwner[id] = { id: id, name: name || "Без владельца", color: color || "#94a3b8",
+      count: 0, start: 0, interest: 0, paid: 0, minSum: 0, lastPaidMonth: 0, firstPaidMonth: null, debts: [] };
+    return perOwner[id];
+  }
+  items.forEach(function (d) {
+    const key = d.ownerId || "__none__";
+    const b = bucket(key, d.ownerName, d.color);
+    b.count++;
+    b.start = r2(b.start + d.start);
+    b.interest = r2(b.interest + d.totalInterest);
+    b.paid = r2(b.paid + d.totalPaid);
+    b.minSum = r2(b.minSum + d.minPay);
+    if (d.paidMonth) {
+      if (!b.lastPaidMonth || d.paidMonth > b.lastPaidMonth) b.lastPaidMonth = d.paidMonth;
+      if (b.firstPaidMonth === null || d.paidMonth < b.firstPaidMonth) b.firstPaidMonth = d.paidMonth;
+    }
+    b.debts.push({ key: d.key, name: d.name, start: d.start, interest: r2(d.totalInterest),
+      paidMonth: d.paidMonth, rate: d.rate, minPay: d.minPay });
+  });
+
+  return {
+    months,
+    items,
+    perOwner,
+    ordering,
+    startTotal,
+    minSum,
+    totalInterest,
+    totalPaid,
+    period: months.length,
+    unreachable,
+    negativeAmortization: everGrew,
+    freeMonthOffset: months.length ? months.length - 1 : 0,
+    freeMonthLabel: months.length ? monthLabelFull(months.length - 1, now) : null
+  };
+}
+
+/** Сравнение стратегий + экономия. */
+function compareStrategies(debts, budget, opts) {
+  opts = opts || {};
+  const base = simulate(debts, 0, "minimum", { now: opts.now });
+  const avalanche = simulate(debts, budget, "avalanche", opts);
+  const snowball = simulate(debts, budget, "snowball", opts);
+
+  function savings(res) {
+    return {
+      interest: base.unreachable ? null : Math.max(0, r2(base.totalInterest - res.totalInterest)),
+      months: base.unreachable ? null : Math.max(0, base.period - res.period)
+    };
+  }
+  return {
+    minimumOnly: base,
+    avalanche: avalanche,
+    snowball: snowball,
+    savings: {
+      avalanche: savings(avalanche),
+      snowball: savings(snowball),
+      avalancheVsSnowball: (avalanche.unreachable || snowball.unreachable) ? null : {
+        interest: r2(snowball.totalInterest - avalanche.totalInterest),
+        months: snowball.period - avalanche.period
+      }
+    }
+  };
+}
+
+/** Сценарии «а если платить больше» — для витрины возможностей. */
+function whatIf(debts, budgets, opts) {
+  const base = simulate(debts, 0, "minimum", { now: (opts || {}).now });
+  return (budgets || []).map(function (b) {
+    const res = simulate(debts, b, "avalanche", opts);
+    return {
+      budget: b,
+      period: res.period,
+      freeMonthLabel: res.freeMonthLabel,
+      totalInterest: res.totalInterest,
+      totalPaid: res.totalPaid,
+      unreachable: res.unreachable,
+      savedInterest: base.unreachable ? null : Math.max(0, r2(base.totalInterest - res.totalInterest)),
+      savedMonths: base.unreachable ? null : Math.max(0, base.period - res.period)
+    };
+  });
+}
+
+/** Строит сетку бюджетов вокруг текущего: 100%, 110%, 125%, 150%, 200%. */
+function budgetGrid(budget) {
+  const seen = [];
+  [budget, budget * 1.1, budget * 1.25, budget * 1.5, budget * 2].forEach(function (b) {
+    const rounded = Math.round(b / 1000) * 1000;
+    if (rounded > 0 && seen.indexOf(rounded) < 0) seen.push(rounded);
+  });
+  return seen.sort(function (a, b) { return a - b; }).slice(0, 6);
+}
+
+/** Нормализует долг из внешнего источника (API, файл) в канонический вид. */
+function normalizeDebt(d, i) {
+  return {
+    id: d.id || null,
+    name: String(d.name == null ? ("Долг " + (i + 1)) : d.name).slice(0, 80),
+    amount: Math.max(0, r2(num(d.amount, 0))),
+    rate: clamp(num(d.rate, 0), 0, 300),
+    minPay: Math.max(0, r2(num(d.minPay, 0))),
+    term: Math.max(0, Math.round(num(d.term, 0))),
+    dueDay: clamp(Math.round(num(d.dueDay, 1)), 1, 31)
+  };
+}
+
+  window.DFCalc = {
+    MAX_MONTHS: MAX_MONTHS,
+    PALETTE: PALETTE,
+    r2: r2,
+    clamp: clamp,
+    num: num,
+    plural: plural,
+    fmtMoney: fmtMoney,
+    fmtPct: fmtPct,
+    durationText: durationText,
+    monthLabel: monthLabel,
+    monthLabelFull: monthLabelFull,
+    yearOf: yearOf,
+    validateDebts: validateDebts,
+    simulate: simulate,
+    compareStrategies: compareStrategies,
+    whatIf: whatIf,
+    budgetGrid: budgetGrid,
+    normalizeDebt: normalizeDebt
+  };
+})();
+
+/*DF_CORE_END*/
+
+/*DF_UI_START*/
+/* ---- интерфейс ---- */
+(function () {
+/**
+ * DebtFree — единый клиент.
+ *
+ * Один и тот же интерфейс работает в трёх режимах, и данные в них одни и те же:
+ *
+ *   1. Telegram Mini App — Telegram отдаёт подписанные данные, сервер проверяет подпись;
+ *   2. браузер с входом — одноразовый код подтверждается в Telegram, дальше сессия;
+ *   3. автономно — если сервера нет (обычный HTML-файл), всё считается и хранится
+ *      прямо в браузере, с экспортом и импортом в файл.
+ *
+ * Расчёт в любом режиме делает одно и то же ядро.
+ */
+
+
+/* Ядро: в обычном файле оно подставлено как window.DFCalc, на сервере — как модуль. */
+const calc = (typeof window !== "undefined" && window.DFCalc) ? window.DFCalc : nodeCalc;
+
+const {
+  fmtMoney, fmtPct, durationText, monthLabel, plural, num,
+  validateDebts, compareStrategies, budgetGrid, whatIf, normalizeDebt, PALETTE
+} = calc;
+
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+const IN_TELEGRAM = !!(tg && tg.initData);
+const STANDALONE = typeof window !== "undefined" && !!window.DF_STANDALONE;
+
+const state = {
+  authMethod: null,     // "telegram" | "web" | "dev" | "local"
+  online: false,
+  user: null,
+  summary: null,
+  profile: { budget: 0, strategy: "avalanche", extra: 0, extraMonth: 3, growth: 0 },
+  debts: [],
+  tab: "plan",
+  editingId: null,
+  login: { code: null, deepLink: null, timer: null }
+};
+
+const $ = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------------------ локальное хранилище (автономный режим) */
+
+const LS_KEY = "debtfree-local-v1";
+
+function localSave() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      profile: state.profile,
+      debts: state.debts
+    }));
+  } catch (e) { /* приватный режим — просто не сохраняем */ }
+}
+
+function localLoad() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.debts)) return false;
+    state.debts = data.debts.map((d, i) => Object.assign(normalizeDebt(d, i), { id: d.id || ("loc" + i) }));
+    state.profile = Object.assign(state.profile, data.profile || {});
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* ------------------------------------------------------------------ сеть */
+
+/**
+ * Запрос к серверу.
+ * Если сервер недоступен (открыт обычный файл), включаем автономный режим:
+ * интерфейс продолжает работать, данные остаются в браузере.
+ */
+async function api(path, options) {
+  options = options || {};
+  if (STANDALONE && !state.online) throw offlineError();
+
+  const headers = Object.assign({ "Content-Type": "application/json" }, options.headers || {});
+  if (IN_TELEGRAM) headers["Authorization"] = "tma " + tg.initData;
+
+  let res;
+  try {
+    res = await fetch("/api/" + path, {
+      method: options.method || "GET",
+      headers: headers,
+      credentials: "same-origin",
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+  } catch (e) {
+    goOffline();
+    throw offlineError();
+  }
+
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+
+  if (!res.ok) {
+    const err = new Error((data && data.error) || ("http_" + res.status));
+    err.status = res.status;
+    err.payload = data;
+    throw err;
+  }
+  return data;
+}
+
+function offlineError() {
+  const e = new Error("offline");
+  e.offline = true;
+  return e;
+}
+
+/** Переходим в автономный режим: считаем сами, храним в браузере. */
+function goOffline() {
+  if (state.authMethod === "local") return;
+  state.online = false;
+  state.authMethod = "local";
+  state.user = { name: "Локальные данные", local: true };
+  if (!state.debts.length) localLoad();
+  rebuildSummary();
+  renderHeader();
+  renderAccount();
+  $("offline-note").hidden = false;
+}
+
+/* ------------------------------------------------------------------ расчёт */
+
+function rebuildSummary() {
+  const debts = state.debts.map((d, i) => Object.assign({}, d, { color: PALETTE[i % PALETTE.length] }));
+  const budget = num(state.profile.budget, 0);
+  const strategy = state.profile.strategy === "snowball" ? "snowball" : "avalanche";
+  const extras = [];
+  if (num(state.profile.extra, 0) > 0) {
+    extras.push({ month: Math.max(0, Math.round(num(state.profile.extraMonth, 3)) - 1), amount: num(state.profile.extra, 0) });
+  }
+  const opts = { extras: extras, growth: num(state.profile.growth, 0) };
+  const comparison = compareStrategies(debts, budget, opts);
+  const chosen = strategy === "snowball" ? comparison.snowball : comparison.avalanche;
+
+  state.summary = {
+    strategy: strategy,
+    budget: budget,
+    validation: validateDebts(debts, budget),
+    plan: chosen,
+    minimumOnly: comparison.minimumOnly,
+    avalanche: comparison.avalanche,
+    snowball: comparison.snowball,
+    savings: strategy === "snowball" ? comparison.savings.snowball : comparison.savings.avalanche,
+    avalancheVsSnowball: comparison.savings.avalancheVsSnowball,
+    whatIf: whatIf(debts, budgetGrid(budget > 0 ? budget : Math.max(comparison.avalanche.minSum, 10000)), opts)
+  };
+  return state.summary;
+}
+
+/* ------------------------------------------------------------------ загрузка */
+
+async function boot() {
+  if (STANDALONE) {
+    /* В обычном файле сервера нет: пробуем только если он есть рядом. */
+    try {
+      const info = await api("auth");
+      state.online = true;
+      state.authMethod = info.authenticated ? (info.authenticated && info.method) : null;
+      if (!info.authenticated) { goOffline(); return; }
+    } catch (e) {
+      goOffline();
+      return;
+    }
+  }
+
+  try {
+    const info = await api("auth");
+    state.authMethod = info.authenticated ? info.method : null;
+    state.online = true;
+    if (!info.authenticated) {
+      renderLogin(info);
+      return;
+    }
+    await refresh();
+  } catch (e) {
+    if (e.offline) return;
+    throw e;
+  }
+}
+
+async function refresh() {
+  const me = await api("me");
+  state.online = true;
+  state.authMethod = me.authMethod || state.authMethod || "web";
+  state.user = me.user;
+  state.profile = me.plan;
+  state.debts = me.debts || [];
+  state.summary = null;
+  try {
+    const res = await api("plan");
+    state.summary = res.data;
+  } catch (e) {
+    rebuildSummary();
+  }
+  finishRender();
+}
+
+function finishRender() {
+  renderHeader();
+  renderAccount();
+  renderPlan();
+  renderDebts();
+  $("loading").hidden = true;
+  $("panel-" + state.tab).hidden = false;
+  if (!state.debts.length) switchTab("debts");
+}
+
+const saveProfile = debounce(async function (patch) {
+  if (state.authMethod === "local") {
+    rebuildSummary();
+    localSave();
+    renderPlan();
+    return;
+  }
+  try {
+    const res = await api("profile", { method: "POST", body: patch });
+    state.profile = res.plan;
+    const plan = await api("plan");
+    state.summary = plan.data;
+    renderPlan();
+  } catch (e) {
+    if (!e.offline) toast("Не удалось сохранить: " + e.message);
+  }
+}, 500);
+
+/* ------------------------------------------------------------------ помощники */
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function toast(message, ms) {
+  const t = $("toast");
+  t.textContent = message;
+  t.classList.add("on");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("on"), ms || 2600);
+}
+
+function haptic(type) {
+  if (!tg || !tg.HapticFeedback) return;
+  try {
+    if (type === "success") tg.HapticFeedback.notificationOccurred("success");
+    else if (type === "error") tg.HapticFeedback.notificationOccurred("error");
+    else tg.HapticFeedback.impactOccurred("light");
+  } catch (e) { /* не критично */ }
+}
+
+function groupDigits(v) {
+  const s = String(v == null ? "" : v).replace(/\s|\u00A0/g, "").replace(",", ".");
+  if (s === "") return "";
+  const neg = s.startsWith("-");
+  const parts = s.replace("-", "").split(".");
+  const int = parts[0].replace(/\D/g, "");
+  const frac = parts.length > 1 ? parts[1].replace(/\D/g, "").slice(0, 2) : null;
+  let out = "", i = 0;
+  for (i = int.length; i > 3; i -= 3) out = " " + int.slice(i - 3, i) + out;
+  out = int.slice(0, i) + out;
+  return (neg ? "−" : "") + out + (frac !== null && frac !== "" ? "," + frac : "");
+}
+
+function parseMoney(v) {
+  const s = String(v == null ? "" : v).replace(/\s|\u00A0/g, "").replace(",", ".");
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+
+function debounce(fn, ms) {
+  let t = null;
+  return function () {
+    const args = arguments, self = this;
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(self, args), ms);
+  };
+}
+
+/* ------------------------------------------------------------------ шапка и аккаунт */
+
+function renderHeader() {
+  const dot = $("status-dot");
+  const who = $("who-text");
+  const note = $("mode-note");
+
+  if (state.authMethod === "telegram") {
+    dot.className = "dot live";
+    who.textContent = state.user ? state.user.name : "…";
+    note.textContent = "Telegram";
+  } else if (state.authMethod === "web") {
+    dot.className = "dot live";
+    who.textContent = state.user ? state.user.name : "…";
+    note.textContent = "браузер";
+  } else if (state.authMethod === "dev") {
+    dot.className = "dot dev";
+    who.textContent = (state.user ? state.user.name : "Разработчик") + " (тест)";
+    note.textContent = "режим разработки";
+  } else {
+    dot.className = "dot dev";
+    who.textContent = "Автономный режим";
+    note.textContent = "данные в браузере";
+  }
+}
+
+function renderAccount() {
+  const box = $("account-box");
+  box.innerHTML = "";
+
+  if (state.authMethod === "local") {
+    box.appendChild(el("p", "hint",
+      "Сервер недоступен, поэтому план считается и хранится прямо в этом браузере. " +
+      "Чтобы данные стали доступны с телефона и в Telegram, откройте сервис по адресу сервера."));
+    const exportBtn = el("button", null, "Скачать данные (JSON)");
+    exportBtn.addEventListener("click", exportLocal);
+    box.appendChild(exportBtn);
+    const importBtn = el("button", null, "Загрузить из файла");
+    importBtn.addEventListener("click", () => $("file-input").click());
+    box.appendChild(importBtn);
+    addStandaloneLink(box);
+    return;
+  }
+
+  const p = el("p", "hint");
+  if (state.authMethod === "telegram") {
+    p.textContent = "Вы вошли через Telegram: " + (state.user ? state.user.name : "") +
+      ". Те же данные откроются в браузере, если войти там по коду.";
+  } else {
+    p.textContent = "Вы вошли в браузере: " + (state.user ? state.user.name : "") +
+      ". Те же данные видны в Telegram — это один аккаунт.";
+  }
+  box.appendChild(p);
+
+  if (!state.user || !state.user.local) {
+    const out = el("button", "ghost danger", "Выйти");
+    out.addEventListener("click", async function () {
+      if (!confirm("Выйти из аккаунта? Данные останутся на сервере.")) return;
+      try {
+        await api("auth/logout", { method: "POST", body: {} });
+      } catch (e) { /* выходим в любом случае */ }
+      location.reload();
+    });
+    box.appendChild(out);
+  }
+  addStandaloneLink(box);
+}
+
+/** Ссылка на автономный файл: пригодится, если нужен вариант без сервера. */
+function addStandaloneLink(box) {
+  const wrap = el("div");
+  wrap.style.marginTop = "14px";
+  const p = el("p", "hint", "Нужен вариант без интернета и сервера? Скачайте один HTML-файл: он считает так же и хранит данные в браузере.");
+  const a = el("a");
+  a.href = "/debtfree.html";
+  a.setAttribute("download", "debtfree.html");
+  a.appendChild(el("button", null, "Скачать файл debtfree.html"));
+  wrap.appendChild(p);
+  wrap.appendChild(a);
+  box.appendChild(wrap);
+}
+
+/* ------------------------------------------------------------------ вход в браузере */
+
+function renderLogin(info) {
+  $("loading").hidden = true;
+  $("panel-plan").hidden = true;
+  $("panel-debts").hidden = true;
+  $("panel-settings").hidden = false;
+  $("tabs").hidden = true;
+
+  const box = $("account-box");
+  box.innerHTML = "";
+
+  const title = el("p", "hint", "Войдите, чтобы видеть свои долги здесь и в Telegram. Пароль не нужен: подтверждение придёт в Telegram.");
+  box.appendChild(title);
+
+  const btn = el("button", "primary", "Войти через Telegram");
+  box.appendChild(btn);
+
+  const status = el("div", "hint");
+  status.style.marginTop = "12px";
+  box.appendChild(status);
+
+  const codeBox = el("div");
+  codeBox.style.display = "none";
+  box.appendChild(codeBox);
+
+  btn.addEventListener("click", async function () {
+    btn.disabled = true;
+    status.textContent = "Создаём код…";
+    try {
+      const start = await api("auth/login/start", { method: "POST", body: {} });
+      state.login.code = start.code;
+      status.textContent = "Откройте Telegram и подтвердите вход:";
+      codeBox.style.display = "block";
+      codeBox.innerHTML = "";
+
+      if (start.deepLink) {
+        const link = el("a");
+        link.href = start.deepLink;
+        link.target = "_blank";
+        link.rel = "noopener";
+        const openBtn = el("button", "primary", "Открыть Telegram");
+        link.appendChild(openBtn);
+        codeBox.appendChild(link);
+      }
+
+      const code = el("div", "code");
+      code.textContent = start.code;
+      codeBox.appendChild(code);
+
+      const hint = el("div", "hint");
+      hint.innerHTML = "Если кнопка не сработала, отправьте боту команду <b>/start " + start.code + "</b>. " +
+        "Код действует " + Math.round((start.expiresInSeconds || 600) / 60) + " минут.";
+      codeBox.appendChild(hint);
+
+      const wait = el("div", "hint");
+      wait.textContent = "Ждём подтверждения…";
+      codeBox.appendChild(wait);
+
+      let attempts = 0;
+      clearInterval(state.login.timer);
+      state.login.timer = setInterval(async function () {
+        attempts++;
+        if (attempts > 120) {
+          clearInterval(state.login.timer);
+          wait.textContent = "Код истёк — нажмите «Войти через Telegram» ещё раз.";
+          btn.disabled = false;
+          return;
+        }
+        try {
+          const check = await api("auth/login/check", { method: "POST", body: { code: state.login.code } });
+          if (check.confirmed) {
+            clearInterval(state.login.timer);
+            wait.textContent = "Готово! Загружаем данные…";
+            await refresh();
+          }
+        } catch (e) { /* сеть моргнула — продолжаем ждать */ }
+      }, 1500);
+    } catch (e) {
+      status.textContent = "Не получилось создать код: " + e.message;
+      btn.disabled = false;
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ план */
+
+function renderPlan() {
+  const data = state.summary;
+  if (!data) return;
+
+  const plan = data.plan;
+  const debts = state.debts;
+
+  const verdict = $("verdict");
+  verdict.innerHTML = "";
+
+  if (!debts.length) {
+    const box = el("div", "box info");
+    box.textContent = "Добавьте первый долг — и DebtFree посчитает, когда вы освободитесь и сколько сэкономите на процентах.";
+    verdict.appendChild(box);
+  } else if (plan.unreachable) {
+    const box = el("div", "box bad");
+    box.innerHTML = "<b>При таком бюджете долг не закрывается.</b> Проценты съедают почти весь платёж. " +
+      "Нужно направлять минимум " + fmtMoney(plan.minSum + plan.startTotal * 0.01) + " в месяц.";
+    verdict.appendChild(box);
+  } else {
+    const free = Math.max(0, data.budget - plan.minSum);
+    const box = el("div", "box " + (free < Math.max(3000, data.budget * 0.12) ? "warn" : "good"));
+    let html = "<b>Свобода от долгов в " + plan.freeMonthLabel + "</b> — через " + durationText(plan.period) + ".";
+    if (data.savings && data.savings.interest > 1) {
+      html += " Против «платить только минимум» вы экономите <b>" + fmtMoney(data.savings.interest) + "</b> процентов";
+      if (data.savings.months > 0) html += " и <b>" + durationText(data.savings.months) + "</b>";
+      html += ".";
+    }
+    if (free < Math.max(3000, data.budget * 0.12)) {
+      html += " На досрочное погашение остаётся всего " + fmtMoney(free) + " в месяц — попробуйте добавить к бюджету.";
+    }
+    box.innerHTML = html;
+    verdict.appendChild(box);
+  }
+
+  data.validation.problems.slice(0, 3).forEach(function (p) {
+    verdict.appendChild(el("div", "box " + (p.level === "error" ? "bad" : "warn"), p.text));
+  });
+
+  const kpis = $("kpis");
+  kpis.innerHTML = "";
+  if (debts.length && !plan.unreachable) {
+    const kpi = (title, value, desc, cls) => {
+      const c = el("div", "kpi " + (cls || ""));
+      c.appendChild(el("div", "t", title));
+      c.appendChild(el("div", "v", value));
+      if (desc) c.appendChild(el("div", "d", desc));
+      return c;
+    };
+    const parts = plan.freeMonthLabel.split(" ");
+    kpis.appendChild(kpi("Свобода от долгов", parts[0] + " " + parts[1], "через " + durationText(plan.period), "hero"));
+    kpis.appendChild(kpi("Мой долг", fmtMoney(plan.startTotal), debts.length + " " + plural(debts.length, "долг", "долга", "долгов")));
+    kpis.appendChild(kpi("Плачу в месяц", fmtMoney(Math.max(data.budget, plan.minSum)), "минимум " + fmtMoney(plan.minSum)));
+    kpis.appendChild(kpi("Проценты", fmtMoney(plan.totalInterest),
+      plan.startTotal > 0 ? fmtPct(plan.totalInterest / plan.startTotal * 100, 0) + " к долгу" : "", "warn"));
+    kpis.appendChild(kpi("Экономия", data.savings && data.savings.interest != null ? fmtMoney(data.savings.interest) : "—",
+      data.minimumOnly.unreachable ? "минимум не закрывает долг" : "против оплаты только минимума", "good"));
+  }
+
+  const budgetInput = $("budget");
+  if (document.activeElement !== budgetInput) budgetInput.value = groupDigits(Math.round(data.budget));
+  const extraInput = $("extra");
+  if (document.activeElement !== extraInput) extraInput.value = groupDigits(Math.round(num(state.profile.extra, 0)));
+  const emInput = $("extra-month");
+  if (document.activeElement !== emInput) emInput.value = String(num(state.profile.extraMonth, 3));
+  $("strategy").value = state.profile.strategy || "avalanche";
+
+  const free = Math.max(0, data.budget - plan.minSum);
+  $("budget-hint").textContent = debts.length
+    ? "Обязательные платежи: " + fmtMoney(plan.minSum) + ". Свободно на досрочку: " + fmtMoney(free) + " в месяц."
+    : "Впишите, сколько готовы платить по долгам каждый месяц.";
+
+  renderChart(plan);
+  renderOrder(plan);
+  renderWhatIf(data.whatIf);
+}
+
+/* ------------------------------------------------------------------ график */
+
+function shortMoney(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(".", ",") + " млн";
+  if (a >= 1e3) return Math.round(v / 1e3) + " тыс.";
+  return String(Math.round(v));
+}
+
+function renderChart(plan) {
+  const svg = $("chart");
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const NS = "http://www.w3.org/2000/svg";
+  const mk = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  };
+
+  const months = plan.months;
+  const legend = $("legend");
+  legend.innerHTML = "";
+  if (!months.length) return;
+
+  const step = Math.max(1, Math.ceil(months.length / 40));
+  const points = [];
+  for (let i = 0; i < months.length; i += step) points.push(months[i]);
+  if (points[points.length - 1] !== months[months.length - 1]) points.push(months[months.length - 1]);
+
+  const W = 340, H = 180, padL = 42, padR = 8, padT = 10, padB = 22;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const maxY = plan.startTotal * 1.05 || 1;
+  const X = (i) => padL + (points.length <= 1 ? iw : i * iw / (points.length - 1));
+  const Y = (v) => padT + ih - (v / maxY) * ih;
+
+  for (let g = 0; g <= 3; g++) {
+    const val = maxY * g / 3, y = Y(val);
+    svg.appendChild(mk("line", { x1: padL, y1: y, x2: W - padR, y2: y, stroke: "rgba(125,135,155,.25)", "stroke-width": 1 }));
+    const label = mk("text", { x: padL - 6, y: y + 4, "text-anchor": "end", "font-size": 9, fill: "currentColor", opacity: .55 });
+    label.textContent = shortMoney(val);
+    svg.appendChild(label);
+  }
+
+  let dArea = "", dLine = "";
+  points.forEach(function (m, i) {
+    const x = X(i).toFixed(1), y = Y(m.totalBalance).toFixed(1);
+    dArea += (i === 0 ? "M" : "L") + x + " " + y + " ";
+    dLine += (i === 0 ? "M" : "L") + x + " " + y + " ";
+  });
+  dArea += "L" + X(points.length - 1).toFixed(1) + " " + Y(0).toFixed(1) + " L" + X(0).toFixed(1) + " " + Y(0).toFixed(1) + " Z";
+  svg.appendChild(mk("path", { d: dArea, fill: "rgba(79,70,229,.15)" }));
+  svg.appendChild(mk("path", { d: dLine, fill: "none", stroke: "#4f46e5", "stroke-width": 2.2, "stroke-linejoin": "round" }));
+
+  const labelEvery = Math.max(1, Math.ceil(points.length / 4));
+  points.forEach(function (m, i) {
+    if (i % labelEvery !== 0 && i !== points.length - 1) return;
+    const t = mk("text", { x: X(i), y: H - 6, "text-anchor": "middle", "font-size": 9, fill: "currentColor", opacity: .55 });
+    t.textContent = m.labelShort;
+    svg.appendChild(t);
+  });
+
+  const last = points[points.length - 1];
+  svg.appendChild(mk("circle", { cx: X(points.length - 1), cy: Y(last.totalBalance), r: 3, fill: "#0f9d6e" }));
+
+  const item = (color, text) => {
+    const s = el("span");
+    const i = el("i"); i.style.background = color;
+    s.appendChild(i);
+    s.appendChild(document.createTextNode(text));
+    return s;
+  };
+  legend.appendChild(item("#4f46e5", "остаток долга"));
+  legend.appendChild(item("#0f9d6e", "свобода: " + plan.freeMonthLabel));
+}
+
+/* ------------------------------------------------------------------ очередь */
+
+function renderOrder(plan) {
+  const box = $("order");
+  box.innerHTML = "";
+  if (!plan.items.length) {
+    box.appendChild(el("div", "hint", "Пока нет долгов для расчёта."));
+    return;
+  }
+
+  const ordered = plan.items.slice().sort((a, b) => (a.paidMonth || 9999) - (b.paidMonth || 9999));
+  ordered.forEach(function (it, i) {
+    const row = el("div", "step");
+    row.appendChild(el("div", "num", String(i + 1)));
+
+    const body = el("div", "body");
+    body.appendChild(el("div", "ttl", it.name));
+    body.appendChild(el("div", "meta", fmtMoney(it.start) + " · " + fmtPct(it.rate, 1) + " · минимум " + fmtMoney(it.minPay) + "/мес"));
+    body.appendChild(el("div", "why", it.paidMonth
+      ? "закроется в " + monthLabel(it.paidMonth - 1, true) + " (" + it.paidMonth + "-й месяц), проценты " + fmtMoney(it.totalInterest)
+      : "не закрывается при текущем бюджете"));
+
+    if (i === 0) {
+      body.appendChild(el("div", "why", plan.ordering === "snowball"
+        ? "Цель номер один: самый маленький долг — быстрая победа."
+        : "Цель номер один: самая высокая ставка — каждый рубль экономит больше всего."));
+    }
+    row.appendChild(body);
+
+    if (it.paidMonth) row.appendChild(el("div", "paid" + (it.paidMonth <= 3 ? " soon" : ""), monthLabel(it.paidMonth - 1, false)));
+    box.appendChild(row);
+  });
+}
+
+function renderWhatIf(rows) {
+  const tb = $("whatif").querySelector("tbody");
+  tb.innerHTML = "";
+  if (!rows || !rows.length || !state.summary) return;
+  const current = state.summary.budget;
+  rows.forEach(function (r) {
+    const tr = el("tr");
+    if (Math.abs(r.budget - current) < 1) tr.className = "me";
+    tr.appendChild(el("td", null, fmtMoney(r.budget) + (Math.abs(r.budget - current) < 1 ? " — сейчас" : "")));
+    tr.appendChild(el("td", "n", r.unreachable ? "не закрыть" : durationText(r.period)));
+    tr.appendChild(el("td", "n", r.savedInterest != null && r.savedInterest > 0 ? "−" + fmtMoney(r.savedInterest) : "—"));
+    tb.appendChild(tr);
+  });
+}
+
+/* ------------------------------------------------------------------ долги */
+
+function renderDebts() {
+  const list = $("debts-list");
+  list.innerHTML = "";
+
+  if (!state.debts.length) {
+    const empty = el("div", "hint");
+    empty.style.padding = "16px";
+    empty.textContent = "Долгов пока нет. Нажмите «Добавить»: название, остаток, ставка и минимальный платёж.";
+    list.appendChild(empty);
+  }
+
+  state.debts.forEach(function (d, i) {
+    const row = el("button", "debt-row");
+    row.type = "button";
+    const mark = el("span", "mark");
+    mark.style.background = PALETTE[i % PALETTE.length];
+    const main = el("div", "main");
+    main.appendChild(el("div", "nm", d.name));
+    main.appendChild(el("div", "sub", fmtPct(d.rate, 1) + " · минимум " + fmtMoney(d.minPay) + "/мес" +
+      (d.term ? " · срок " + d.term + " мес." : "")));
+    row.appendChild(mark);
+    row.appendChild(main);
+    row.appendChild(el("div", "sum", fmtMoney(d.amount)));
+    row.addEventListener("click", () => openSheet(d));
+    list.appendChild(row);
+  });
+
+  const alerts = $("debt-alerts");
+  alerts.innerHTML = "";
+  if (state.summary && state.summary.validation.problems.length) {
+    state.summary.validation.problems.slice(0, 4).forEach(function (p) {
+      alerts.appendChild(el("div", "box " + (p.level === "error" ? "bad" : "warn"), p.text));
+    });
+  }
+}
+
+/* ------------------------------------------------------------------ редактор */
+
+function openSheet(debt) {
+  state.editingId = debt ? debt.id : null;
+  $("sheet-title").textContent = debt ? "Изменить долг" : "Новый долг";
+  $("f-name").value = debt ? debt.name : "";
+  $("f-amount").value = debt ? groupDigits(String(Math.round(debt.amount))) : "";
+  $("f-rate").value = debt ? String(debt.rate).replace(".", ",") : "";
+  $("f-min").value = debt ? groupDigits(String(Math.round(debt.minPay))) : "";
+  $("f-term").value = debt && debt.term ? String(debt.term) : "";
+  $("f-day").value = debt ? String(debt.dueDay || 1) : "10";
+  $("sheet-delete").hidden = !debt;
+  $("sheet-hint").textContent = debt
+    ? "Ставку и минимальный платёж смотрите в приложении банка или в договоре."
+    : "Если не знаете ставку — поставьте 0, план всё равно посчитается.";
+  $("sheet").hidden = false;
+  setTimeout(() => $("f-name").focus(), 50);
+}
+
+function closeSheet() {
+  $("sheet").hidden = true;
+  state.editingId = null;
+}
+
+async function saveSheet() {
+  const debt = {
+    id: state.editingId,
+    name: $("f-name").value.trim() || "Долг",
+    amount: parseMoney($("f-amount").value),
+    rate: parseMoney($("f-rate").value),
+    minPay: parseMoney($("f-min").value),
+    term: parseInt($("f-term").value, 10) || 0,
+    dueDay: Math.min(31, Math.max(1, parseInt($("f-day").value, 10) || 1))
+  };
+
+  if (debt.amount <= 0) { toast("Укажите остаток долга"); return; }
+  if (debt.minPay <= 0) { toast("Укажите минимальный платёж"); return; }
+
+  const list = state.debts.slice();
+  if (state.editingId) {
+    const idx = list.findIndex((d) => d.id === state.editingId);
+    if (idx >= 0) list[idx] = Object.assign({}, list[idx], debt);
+  } else {
+    list.push(debt);
+  }
+
+  const wasEditing = !!state.editingId;
+  const btn = $("sheet-save");
+  btn.disabled = true;
+  try {
+    if (state.authMethod === "local") {
+      state.debts = list.map((d, i) => Object.assign(normalizeDebt(d, i), { id: d.id || ("loc" + i) }));
+      rebuildSummary();
+      localSave();
+    } else {
+      const res = await api("debts", { method: "POST", body: { debts: list } });
+      state.debts = res.debts;
+      const plan = await api("plan");
+      state.summary = plan.data;
+    }
+    closeSheet();
+    haptic("success");
+    renderPlan();
+    renderDebts();
+    toast(wasEditing ? "Сохранено" : "Долг добавлен");
+  } catch (e) {
+    haptic("error");
+    toast(e.offline ? "Сервер недоступен — данные сохранены в браузере" : "Ошибка сохранения: " + e.message);
+    if (e.offline) {
+      state.debts = list.map((d, i) => Object.assign(normalizeDebt(d, i), { id: d.id || ("loc" + i) }));
+      rebuildSummary();
+      localSave();
+      closeSheet();
+      renderPlan();
+      renderDebts();
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteDebt() {
+  if (!state.editingId) return;
+  if (!confirm("Удалить этот долг?")) return;
+  const list = state.debts.filter((d) => d.id !== state.editingId);
+  try {
+    if (state.authMethod === "local") {
+      state.debts = list;
+      rebuildSummary();
+      localSave();
+    } else {
+      const res = await api("debts", { method: "POST", body: { debts: list } });
+      state.debts = res.debts;
+      const plan = await api("plan");
+      state.summary = plan.data;
+    }
+    closeSheet();
+    renderPlan();
+    renderDebts();
+    toast("Долг удалён");
+  } catch (e) {
+    toast("Не удалось удалить: " + e.message);
+  }
+}
+
+/* ------------------------------------------------------------------ экспорт и импорт */
+
+function download(content, filename) {
+  const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+function exportLocal() {
+  download(JSON.stringify({
+    app: "debtfree",
+    exportedAt: new Date().toISOString(),
+    profile: state.profile,
+    debts: state.debts
+  }, null, 2), "debtfree-my-data.json");
+  toast("Файл с вашими данными сохранён");
+}
+
+function importLocal(file) {
+  const reader = new FileReader();
+  reader.onload = function () {
+    let data = null;
+    try { data = JSON.parse(String(reader.result)); }
+    catch (e) { toast("Не удалось прочитать файл"); return; }
+    const incoming = Array.isArray(data) ? data : (data && data.debts);
+    if (!Array.isArray(incoming) || !incoming.length) { toast("В файле нет долгов"); return; }
+    state.debts = incoming.map((d, i) => Object.assign(normalizeDebt(d, i), { id: d.id || ("loc" + i) }));
+    if (data.profile) state.profile = Object.assign(state.profile, data.profile);
+    else if (data.budget !== undefined) state.profile.budget = num(data.budget, 0);
+    rebuildSummary();
+    localSave();
+    renderHeader();
+    renderPlan();
+    renderDebts();
+    toast("Загружено долгов: " + state.debts.length);
+  };
+  reader.onerror = function () { toast("Ошибка чтения файла"); };
+  reader.readAsText(file);
+}
+
+/* ------------------------------------------------------------------ табы */
+
+function switchTab(tab) {
+  state.tab = tab;
+  ["plan", "debts", "settings"].forEach(function (t) {
+    $("panel-" + t).hidden = t !== tab;
+  });
+  document.querySelectorAll("#tabs button").forEach(function (b) {
+    b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  });
+  haptic("light");
+}
+
+/* ------------------------------------------------------------------ события */
+
+function bind() {
+  $("tabs").addEventListener("click", function (ev) {
+    const b = ev.target.closest("button");
+    if (b) switchTab(b.dataset.tab);
+  });
+
+  $("budget").addEventListener("input", function () {
+    const v = parseMoney(this.value);
+    state.profile.budget = v;
+    if (state.authMethod === "local") { rebuildSummary(); renderPlan(); localSave(); }
+    else saveProfile({ budget: v });
+  });
+  $("budget").addEventListener("blur", function () {
+    this.value = groupDigits(Math.round(parseMoney(this.value)));
+  });
+
+  $("strategy").addEventListener("change", function () {
+    state.profile.strategy = this.value;
+    if (state.authMethod === "local") { rebuildSummary(); renderPlan(); localSave(); }
+    else saveProfile({ strategy: this.value });
+  });
+
+  $("extra").addEventListener("input", function () {
+    state.profile.extra = parseMoney(this.value);
+    if (state.authMethod === "local") { rebuildSummary(); renderPlan(); localSave(); }
+    else saveProfile({ extra: state.profile.extra });
+  });
+  $("extra").addEventListener("blur", function () {
+    this.value = groupDigits(Math.round(parseMoney(this.value)));
+  });
+
+  $("extra-month").addEventListener("input", function () {
+    state.profile.extraMonth = Math.max(1, Math.min(600, parseInt(this.value, 10) || 1));
+    if (state.authMethod === "local") { rebuildSummary(); renderPlan(); localSave(); }
+    else saveProfile({ extraMonth: state.profile.extraMonth });
+  });
+
+  $("btn-add-debt").addEventListener("click", function () { openSheet(null); });
+  $("sheet-close").addEventListener("click", closeSheet);
+  $("sheet").addEventListener("click", function (ev) { if (ev.target === this) closeSheet(); });
+  $("sheet-save").addEventListener("click", saveSheet);
+  $("sheet-delete").addEventListener("click", deleteDebt);
+
+  $("btn-export").addEventListener("click", function () {
+    if (state.authMethod === "local") return exportLocal();
+    download(JSON.stringify({
+      app: "debtfree",
+      exportedAt: new Date().toISOString(),
+      profile: state.profile,
+      debts: state.debts
+    }, null, 2), "debtfree-my-data.json");
+    toast("Файл с вашими данными сохранён");
+  });
+
+  $("btn-wipe").addEventListener("click", async function () {
+    if (!confirm("Удалить все ваши долги и настройки? Это необратимо.")) return;
+    if (state.authMethod === "local") {
+      state.debts = [];
+      state.profile = { budget: 0, strategy: "avalanche", extra: 0, extraMonth: 3, growth: 0 };
+      rebuildSummary();
+      localSave();
+      renderPlan();
+      renderDebts();
+      toast("Данные удалены");
+      return;
+    }
+    try {
+      await api("data", { method: "DELETE" });
+      await refresh();
+      renderDebts();
+      toast("Данные удалены");
+    } catch (e) {
+      toast("Не удалось удалить данные");
+    }
+  });
+
+  /* скрытый выбор файла создаём сами: он нужен и в автономном режиме */
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.id = "file-input";
+  fileInput.accept = ".json,application/json";
+  fileInput.hidden = true;
+  document.body.appendChild(fileInput);
+  fileInput.addEventListener("change", function () {
+    if (this.files && this.files[0]) importLocal(this.files[0]);
+    this.value = "";
+  });
+}
+
+/* ------------------------------------------------------------------ старт */
+
+async function start() {
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    try {
+      if (tg.setHeaderColor) tg.setHeaderColor("bg_color");
+      if (tg.setBackgroundColor) tg.setBackgroundColor("bg_color");
+      if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+      if (tg.onEvent) {
+        tg.onEvent("themeChanged", function () {
+          if (state.summary) renderChart(state.summary.plan);
+        });
+      }
+    } catch (e) { /* старые версии Telegram */ }
+  }
+
+  bind();
+  renderHeader();
+  $("about-version").textContent = "Версия 0.3 · " + (STANDALONE ? "файл без сервера" : "сервис DebtFree");
+
+  try {
+    await boot();
+    if (state.authMethod && state.authMethod !== "local") finishRender();
+  } catch (e) {
+    if (e.status === 401) {
+      renderLogin({ botUsername: null });
+    } else {
+      $("loading").textContent = "Не удалось загрузить данные: " + e.message;
+    }
+  }
+}
+
+start();
+
+})();
+/*DF_UI_END*/
+})();
+</script>
+</body>
+</html>
